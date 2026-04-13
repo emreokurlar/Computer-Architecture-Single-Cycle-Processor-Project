@@ -1,0 +1,31 @@
+module regfile (
+    input  wire        clk,
+    input  wire        we3,         // write enable
+    input  wire [3:0]  ra1,         // read address 1  (Rn)
+    input  wire [3:0]  ra2,         // read address 2  (Rm or Rd for STR)
+    input  wire [3:0]  wa3,         // write address
+    input  wire [31:0] wd3,         // write data
+    input  wire [31:0] r15,         // R15 = PC + 8
+    output wire [31:0] rd1,         // read data 1
+    output wire [31:0] rd2,         // read data 2
+    // Debug interface (connect to FPGA switches)
+    input  wire [3:0]  dbg_addr,
+    output wire [31:0] dbg_data
+);
+    reg [31:0] rf [0:14];           // R0–R14
+
+    // Initialise to 0 for simulation
+    integer k;
+    initial
+        for (k = 0; k < 15; k = k + 1) rf[k] = 32'b0;
+
+    // Synchronous write (ignore writes to R15)
+    always @(posedge clk)
+        if (we3 && (wa3 != 4'd15))
+            rf[wa3] <= wd3;
+
+    // Combinational read: R15 returns externally supplied PC+8
+    assign rd1      = (ra1 == 4'd15) ? r15 : rf[ra1];
+    assign rd2      = (ra2 == 4'd15) ? r15 : rf[ra2];
+    assign dbg_data = (dbg_addr == 4'd15) ? r15 : rf[dbg_addr];
+endmodule

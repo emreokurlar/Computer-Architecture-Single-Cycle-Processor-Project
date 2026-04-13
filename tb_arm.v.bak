@@ -1,0 +1,439 @@
+// ============================================================
+// FILE:    tb_arm.v
+// TARGET:  arm.v  (first-version modules, 4-bit aluflags,
+//                  all 15 ARM conditions in condcheck)
+//
+// PROGRAM SUMMARY (memfile.dat):
+//   0x00  MOV   R1, #0x13           R1 = 19
+//   0x04  ADD   R2, R1, R1          R2 = 38
+//   0x08  AND   R3, R1, R2          R3 = 2
+//   0x0C  B     #0                  skip 0x10, goto 0x14
+//   0x10  (skipped by branch)
+//   0x14  MOV   R4, R1 LSL #2       R4 = 76
+//   0x18  SUB   R5, R1, R2 LSR #2   R5 = 10
+//   0x1C  ORR   R6, R3, R3 ROR #2   R6 = 0x80000002
+//   0x20  MOV   R7, R6 ASR #28      R7 = 0xFFFFFFF8
+//   0x24  STR   R2, [R1, #85]       Mem[104] = 38
+//   0x28  LDR   R8, [R3, #102]      R8 = Mem[104] = 38
+//   0x2C  CMP   R2, R8              Z = 1  (38 == 38)
+//   0x30  BNE   #18                 NOT taken  (Z=1)
+//   0x34  BEQ   #0                  TAKEN -> 0x3C
+//   0x38  (not reached)
+//   0x3C  BL    #1                  R14=0x40, PC->0x48
+//   0x40  ANDEQ R0,R0,R0            executes (Z=1), R0 unchanged
+//   0x44  MOV   R0, #0x330          R0 = 0x330
+//   0x48  BX    R14                 PC = 0x40  (loop forever)
+//   0x4C  (not reached)
+//
+// TIMING MODEL (single-cycle):
+//   Each instruction takes exactly 1 clock cycle.
+//   PC and registers update on the RISING edge.
+//   The always@(negedge) trace block samples mid-cycle:
+//     negedge k shows PC of instruction being executed in
+//     cycle k (result is written on the NEXT posedge).
+// ============================================================
+
+`timescale 1ns/1ps
+
+module tb_arm;
+
+    // =========================================================
+    // DUT Interface
+    // =========================================================
+    reg         clk;
+    reg         reset;
+    reg  [3:0]  dbg_reg_sel;
+    wire [31:0] dbg_reg_data;
+    wire [31:0] pc_out;
+
+    // =========================================================
+    // DUT Instantiation
+    // =========================================================
+    arm dut (
+        .clk          (clk),
+        .reset        (reset),
+        .dbg_reg_sel  (dbg_reg_sel),
+        .dbg_reg_data (dbg_reg_data),
+        .pc_out       (pc_out)
+    );
+
+    // =========================================================
+    // Clock  —  10 ns period (100 MHz)
+    // =========================================================
+    initial clk = 1'b0;
+    always  #5  clk = ~clk;
+
+    // =========================================================
+    // Test Counters  (initialised in main initial block)
+    // =========================================================
+    integer pass_count;
+    integer fail_count;
+    integer test_num;
+    integer trace_cyc;          // counts execution cycles for trace
+
+    // =========================================================
+    // TASK: check_reg
+    //   Sets dbg_reg_sel, waits 2 ns for combinational settle,
+    //   compares with expected value, prints PASS or FAIL.
+    // =========================================================
+    task check_reg;
+        input  [3:0]   rnum;
+        input  [31:0]  expected;
+        input  [399:0] desc;      // up to 50 ASCII characters
+        reg    [31:0]  actual;
+        begin
+            dbg_reg_sel = rnum;
+            #2;                   // combinational propagation delay
+            actual   = dbg_reg_data;
+            test_num = test_num + 1;
+
+            if (actual === expected) begin
+                $display("  [PASS] Test %02d  R%-2d  got=0x%08X  exp=0x%08X  %s",
+                         test_num, rnum, actual, expected, desc);
+                pass_count = pass_count + 1;
+            end else begin
+                $display("  [FAIL] Test %02d  R%-2d  got=0x%08X  exp=0x%08X  %s  *** MISMATCH ***",
+                         test_num, rnum, actual, expected, desc);
+                fail_count = fail_count + 1;
+            end
+        end
+    endtask
+
+    // =========================================================
+    // TASK: check_pc_in_set
+    //   Checks that pc_out is one of three valid addresses.
+    //   Used to verify PC is inside the BX loop {0x40,0x44,0x48}.
+    // =========================================================
+    task check_pc_in_set;
+        input [31:0]  a0;
+        input [31:0]  a1;
+        input [31:0]  a2;
+        input [399:0] desc;
+        begin
+            test_num = test_num + 1;
+            if (pc_out===a0 || pc_out===a1 || pc_out===a2) begin
+                $display("  [PASS] Test %02d  PC=0x%08X is inside valid set  %s",
+                         test_num, pc_out, desc);
+                pass_count = pass_count + 1;
+            end else begin
+                $display("  [FAIL] Test %02d  PC=0x%08X NOT in {0x%08X,0x%08X,0x%08X}  %s",
+                         test_num, pc_out, a0, a1, a2, desc);
+                fail_count = fail_count + 1;
+            end
+        end
+    endtask
+
+    // =========================================================
+    // TASK: separator
+    //   Prints a labelled section divider.
+    // =========================================================
+    task separator;
+        input [399:0] label;
+        begin
+            $display("");
+            $display("  --------------------------------------------------------");
+            $display("  %s", label);
+            $display("  --------------------------------------------------------");
+        end
+    endtask
+
+    // =========================================================
+    // ALWAYS BLOCK — Cycle-by-Cycle Execution Trace
+    //
+    // Samples PC on every FALLING edge so that we see the address
+    // of the instruction currently being executed (the result will
+    // be committed on the NEXT rising edge).
+    // Only active after reset is deasserted.
+    // =========================================================
+    always @(negedge clk) begin
+        if (!reset) begin
+            trace_cyc = trace_cyc + 1;
+
+            // Only display the first 20 cycles (covers full program)
+            if (trace_cyc <= 20) begin
+                $write("  [TRC] CYC=%02d  PC=0x%08X  ->  ",
+                       trace_cyc, pc_out);
+                case (pc_out)
+                    32'h00000000:
+                        $display("MOV R1, #0x13");
+                    32'h00000004:
+                        $display("ADD R2, R1, R1");
+                    32'h00000008:
+                        $display("AND R3, R1, R2");
+                    32'h0000000C:
+                        $display("B #0   [branch TAKEN -> 0x14, skip 0x10]");
+                    32'h00000010: begin
+                        $display("0x00000000  !! SHOULD BE SKIPPED — B FAILED !!");
+                        fail_count = fail_count + 1;  // implicit error
+                    end
+                    32'h00000014:
+                        $display("MOV R4, R1 LSL #2");
+                    32'h00000018:
+                        $display("SUB R5, R1, R2 LSR #2");
+                    32'h0000001C:
+                        $display("ORR R6, R3, R3 ROR #2");
+                    32'h00000020:
+                        $display("MOV R7, R6 ASR #28");
+                    32'h00000024:
+                        $display("STR R2, [R1, #85]");
+                    32'h00000028:
+                        $display("LDR R8, [R3, #102]");
+                    32'h0000002C:
+                        $display("CMP R2, R8             [Z flag <- 1]");
+                    32'h00000030:
+                        $display("BNE #18                [NOT taken, Z=1]");
+                    32'h00000034:
+                        $display("BEQ #0                 [TAKEN -> 0x3C, Z=1]");
+                    32'h00000038: begin
+                        $display("0x00000000  !! SHOULD NOT BE REACHED — BEQ FAILED !!");
+                        fail_count = fail_count + 1;
+                    end
+                    32'h0000003C:
+                        $display("BL #1                  [R14 <- 0x40, PC -> 0x48]");
+                    32'h00000040:
+                        $display("ANDEQ R0,R0,R0         [EQ passes Z=1, R0 unchanged]");
+                    32'h00000044:
+                        $display("MOV R0, #0x330         [R0 <- 816]");
+                    32'h00000048:
+                        $display("BX R14                 [PC <- R14 = 0x40, BX loop]");
+                    default:
+                        $display("!! UNEXPECTED PC — processor went off-track !!");
+                endcase
+            end
+        end
+    end
+
+    // =========================================================
+    // MAIN INITIAL BLOCK
+    // =========================================================
+    initial begin
+
+        // ---- Initialise all counters ----
+        pass_count  = 0;
+        fail_count  = 0;
+        test_num    = 0;
+        trace_cyc   = 0;
+        reset       = 1'b1;
+        dbg_reg_sel = 4'b0000;
+
+        // ---- Banner ----
+        $display("");
+        $display("  ########################################################");
+        $display("  #     ARM Single-Cycle Processor — Comprehensive TB    #");
+        $display("  #     Using: first-version modules (4-bit aluflags)    #");
+        $display("  ########################################################");
+
+        // ---- Apply synchronous reset for 2 rising edges ----
+        repeat(2) @(posedge clk);
+        #1;                         // 1 ns after second posedge
+        reset = 1'b0;
+        $display("");
+        $display("  [INFO] Reset deasserted at t=%0t ns", $time);
+
+        // ===========================================================
+        // PHASE 1  —  Cycle-by-Cycle Execution Trace
+        //   (Handled by always@(negedge) block above.
+        //    We just run enough clock cycles here so the trace fires.)
+        // ===========================================================
+        separator("PHASE 1 — Execution Trace (negedge sampling)");
+
+        // 25 clock cycles covers all 18 interesting instructions
+        // plus several iterations of the BX loop
+        repeat(25) @(posedge clk);
+        #2;     // settle combinational outputs after last posedge
+
+        // ===========================================================
+        // PHASE 2  —  Data-Processing Register Verification
+        // ===========================================================
+        separator("PHASE 2 — Data-Processing Registers");
+        $display("");
+
+        //   MOV R1, #0x13
+        //   imm: rot=0, imm8=0x13 -> 0x13 ROR 0 = 19
+        check_reg(4'd1,  32'h00000013,
+                  "MOV R1,#0x13                    -> 19");
+
+        //   ADD R2, R1, R1
+        //   R1+R1 = 19+19 = 38
+        check_reg(4'd2,  32'h00000026,
+                  "ADD R2,R1,R1                    -> 38");
+
+        //   AND R3, R1, R2
+        //   0x13 & 0x26 = 0x02
+        check_reg(4'd3,  32'h00000002,
+                  "AND R3,R1,R2  (0x13&0x26)       -> 2");
+
+        //   MOV R4, R1 LSL #2
+        //   19 << 2 = 76 = 0x4C
+        check_reg(4'd4,  32'h0000004C,
+                  "MOV R4,R1 LSL#2  (19<<2)        -> 76");
+
+        //   SUB R5, R1, R2 LSR #2
+        //   R2>>2 = 38>>2 = 9  (logical)
+        //   R1 - 9 = 19 - 9 = 10
+        check_reg(4'd5,  32'h0000000A,
+                  "SUB R5,R1,R2 LSR#2  (19-9)      -> 10");
+
+        //   ORR R6, R3, R3 ROR #2
+        //   R3=2 = 0x00000002
+        //   0x2 ROR 2 = (2>>2)|(2<<30) = 0x80000000
+        //   0x2 | 0x80000000 = 0x80000002
+        check_reg(4'd6,  32'h80000002,
+                  "ORR R6,R3,R3 ROR#2              -> 0x80000002");
+
+        //   MOV R7, R6 ASR #28
+        //   0x80000002 ASR 28:
+        //   sign=1, fill with 1s -> 0xFFFFFFF8
+        check_reg(4'd7,  32'hFFFFFFF8,
+                  "MOV R7,R6 ASR#28                -> 0xFFFFFFF8");
+
+        // ===========================================================
+        // PHASE 3  —  Memory Instructions (STR / LDR)
+        // ===========================================================
+        separator("PHASE 3 — Memory Instructions (STR then LDR)");
+        $display("");
+        $display("  STR R2,[R1,#85] : Mem[19+85] = Mem[104] <- R2 = 38");
+        $display("  LDR R8,[R3,#102]: R8         = Mem[2+102] = Mem[104]");
+        $display("  Both access WORD address 26 (byte 104 = 0x68).");
+        $display("");
+
+        //   R8 must equal what was stored by STR (= R2 = 38)
+        check_reg(4'd8,  32'h00000026,
+                  "LDR R8 = STR'd value of R2      -> 38");
+
+        // ===========================================================
+        // PHASE 4  —  Branch Instructions
+        // ===========================================================
+        separator("PHASE 4 — Branch Instructions (B, BNE, BEQ, BL, BX)");
+        $display("");
+
+        // --- B #0 at 0x0C ---
+        // If B was taken:   PC jumped to 0x14, R4 was written (=76).
+        // If B was NOT taken: 0x10 = ANDEQ R0,R0,R0 executes.
+        //   With Z=0 at that point, EQ fails, so R0 unchanged (=0).
+        //   Either way, R4 gets set at 0x14. So R4=76 is a necessary
+        //   but not sufficient proof.  The trace (Phase 1) is definitive.
+        $display("  B #0 check: R4=0x4C proves 0x14 was executed (needed B).");
+        check_reg(4'd4, 32'h0000004C,
+                  "B #0 -> 0x14 executed (R4=76)   -> 0x4C");
+
+        // --- BNE #18 at 0x30 (NOT taken because Z=1 from CMP) ---
+        // If BNE HAD been taken, target = 0x30+8+(18<<2) = 0x80.
+        // Nothing at 0x80 would set R14=0x40, so R14!=0x40 would
+        // indicate BNE was wrongly taken.
+        $display("");
+        $display("  BNE check: R14=0x40 proves BNE was NOT taken");
+        $display("             (BL at 0x3C must have been reached).");
+        check_reg(4'd14, 32'h00000040,
+                  "BNE not taken + BEQ taken + BL  -> R14=0x40");
+
+        // --- BEQ #0 at 0x34 (TAKEN because Z=1 from CMP) ---
+        // Target = 0x34+8+0 = 0x3C (BL instruction).
+        // R14=0x40 directly proves BL at 0x3C was reached,
+        // which confirms BEQ was taken.
+        $display("");
+        $display("  BEQ check: already confirmed by R14=0x40 above.");
+        $display("  CMP set Z=1  =>  BNE not taken  =>  BEQ taken");
+        $display("              =>  BL reached       =>  R14 = 0x40.");
+
+        // --- BL #1 at 0x3C ---
+        // R14 should be 0x40 (= PC+4 = 0x3C+4).
+        // Already checked in R14 test above; repeated for clarity.
+        $display("");
+        $display("  BL check: R14 = PC+4 = 0x3C+4 = 0x40");
+        test_num = test_num + 1;
+        dbg_reg_sel = 4'd14; #2;
+        if (dbg_reg_data === 32'h00000040) begin
+            $display("  [PASS] Test %02d  BL saved return addr  R14=0x%08X  -> 0x40",
+                     test_num, dbg_reg_data);
+            pass_count = pass_count + 1;
+        end else begin
+            $display("  [FAIL] Test %02d  BL save WRONG         R14=0x%08X  exp=0x40",
+                     test_num, dbg_reg_data);
+            fail_count = fail_count + 1;
+        end
+
+        // --- BX R14 at 0x48 (loops through 0x44, sets R0=0x330) ---
+        // BL branches to 0x48 (BX R14).
+        // BX sets PC = R14 = 0x40.
+        // Execution: 0x40(ANDEQ) -> 0x44(MOV R0,#0x330) -> 0x48(BX) -> loop.
+        // R0=0x330 proves the BX loop executed at least once.
+        $display("");
+        $display("  BX check: R0=0x330 proves BX looped through 0x44");
+        $display("            (MOV R0,#0x330 at 0x44 reached via BX).");
+        check_reg(4'd0, 32'h00000330,
+                  "BX loop -> MOV R0,#0x330 ran    -> 0x330");
+
+        // --- PC sanity: must be inside the BX loop ---
+        $display("");
+        $display("  PC check: processor should be cycling {0x40, 0x44, 0x48}.");
+        check_pc_in_set(32'h00000040, 32'h00000044, 32'h00000048,
+                        "PC in BX loop {0x40,0x44,0x48}");
+
+        // ===========================================================
+        // PHASE 5  —  CMP + Conditional Flag Summary
+        // ===========================================================
+        separator("PHASE 5 — CMP and Conditional Logic Summary");
+        $display("");
+        $display("  CMP R2, R8  performs R2-R8 = 38-38 = 0, sets Z=1.");
+        $display("  EQ condition (Z=1): used by BEQ at 0x34  -> TAKEN  (proven by R14=0x40).");
+        $display("  NE condition (Z=0): used by BNE at 0x30  -> NOT taken (proven by R14=0x40).");
+        $display("  AL condition:       used by all other instructions (always executes).");
+        $display("");
+        $display("  Indirect proof via register values:");
+
+        // CMP indirect: if Z was NOT set, BEQ would not be taken,
+        // BL at 0x3C would not run, R14 would remain 0.
+        test_num = test_num + 1;
+        dbg_reg_sel = 4'd14; #2;
+        if (dbg_reg_data === 32'h00000040) begin
+            $display("  [PASS] Test %02d  CMP set Z=1 confirmed: R14=0x%08X -> BEQ+BL ran",
+                     test_num, dbg_reg_data);
+            pass_count = pass_count + 1;
+        end else begin
+            $display("  [FAIL] Test %02d  CMP may NOT have set Z=1: R14=0x%08X (exp 0x40)",
+                     test_num, dbg_reg_data);
+            fail_count = fail_count + 1;
+        end
+
+        // Also cross-check R2 == R8 (the operands CMP compared)
+        $display("");
+        $display("  Cross-check: R2 and R8 must both equal 38 for CMP to yield Z=1.");
+        check_reg(4'd2, 32'h00000026, "R2 = 38  (CMP left  operand)   ");
+        check_reg(4'd8, 32'h00000026, "R8 = 38  (CMP right operand)   ");
+
+        // ===========================================================
+        // FINAL SUMMARY
+        // ===========================================================
+        $display("");
+        $display("  ########################################################");
+        $display("  #                   FINAL SUMMARY                      #");
+        $display("  ########################################################");
+        $display("  #  Total tests  : %3d                                  #",
+                 test_num);
+        $display("  #  PASSED       : %3d                                  #",
+                 pass_count);
+        $display("  #  FAILED       : %3d                                  #",
+                 fail_count);
+        $display("  #------------------------------------------------------#");
+        if (fail_count == 0) begin
+            $display("  #  RESULT : *** ALL TESTS PASSED — PROCESSOR OK ***   #");
+        end else begin
+            $display("  #  RESULT : *** %3d TEST(S) FAILED — SEE ABOVE ***    #",
+                     fail_count);
+        end
+        $display("  ########################################################");
+        $display("");
+
+        $finish;
+    end
+
+    // =========================================================
+    // Optional waveform dump for ModelSim / GTKWave
+    // =========================================================
+    initial begin
+        $dumpfile("arm_tb.vcd");
+        $dumpvars(0, tb_arm);
+    end
+
+endmodule

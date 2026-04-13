@@ -1,0 +1,850 @@
+// ============================================================
+// FILE:  tb_diagnostic.v
+// PURPOSE:
+//   Module-by-module diagnostic testbench for the ARM
+//   single-cycle processor.  Each section isolates one
+//   Verilog source file.  Failures pinpoint which module
+//   to fix.
+//
+// REQUIRES:
+//   - top_level.v with ports: clk, reset,
+//       dbg_reg_sel[3:0], dbg_reg_data[31:0], pc_out[31:0]
+//   - diag_memfile.dat renamed to memfile.dat
+//       (replace the original memfile.dat)
+//
+// MODULE TEST MAP:
+//   Section  1  flopr.v       PC register reset + increment
+//   Section  2  imem.v        Instruction fetch at correct addr
+//   Section  3  regfile.v     Register write and read-back
+//   Section  4  adder.v       PC+8 via R15 read
+//   Section  5  alu.v         ADD, SUB, AND, ORR operations
+//   Section  6  shifter.v     LSL, LSR, ASR, ROR
+//   Section  7  extend.v      Rotate-immediate encoding
+//   Section  8  dmem.v        STR followed by LDR
+//   Section  9  condlogic.v   Flag storage (CMP sets Z)
+//   Section 10  condcheck.v   BNE not taken (Z=1)
+//   Section 11  condcheck.v   BEQ not taken (Z=0)
+//   Section 12  condcheck.v   BEQ taken     (Z=1)
+//   Section 13  condcheck.v   BNE taken     (Z=0)
+//   Section 14  decoder.v     B  (unconditional branch)
+//   Section 15  decoder.v     BL (branch with link)
+//   Section 16  decoder.v     BX (branch exchange)
+//
+// DIAGNOSIS GUIDE:
+//   If ALL tests fail          -> top_level.v debug ports not connected
+//   All PCs wrong              -> flopr.v reset or pcsrc wiring
+//   Section 5 fails only       -> alu.v operation encoding
+//   Section 6 fails only       -> shifter.v sh/shamt mux
+//   Section 7 fails only       -> extend.v rotate calculation
+//   Section 8 fails only       -> dmem.v address or write enable
+//   Sections 9-13 fail         -> condlogic.v flag write / condcheck.v
+//   Sections 14-16 fail        -> decoder.v branch detection or pcsrc wire
+// ============================================================
+
+`timescale 1ns / 1ps
+
+module tb_diagnostic;
+
+    // =========================================================
+    // DUT Interface
+    // =========================================================
+    reg         clk;
+    reg         reset;
+    reg  [3:0]  dbg_reg_sel;
+    wire [31:0] dbg_reg_data;
+    wire [31:0] pc_out;
+
+    top_level dut (
+        .clk          (clk),
+        .reset        (reset),
+        .dbg_reg_sel  (dbg_reg_sel),
+        .dbg_reg_data (dbg_reg_data),
+        .pc_out       (pc_out)
+    );
+
+    // =========================================================
+    // Clock: 10 ns period
+    //   posedge at t = 5, 15, 25, 35 ... ns
+    //   negedge at t = 10, 20, 30, 40 ... ns
+    // =========================================================
+    initial clk = 1'b0;
+    always  #5 clk = ~clk;
+
+    // =========================================================
+    // Global Counters
+    // =========================================================
+    integer pass_count;
+    integer fail_count;
+    integer test_num;
+
+    // Per-section counters (reset at start of each section)
+    integer sec_pass;
+    integer sec_fail;
+    integer saved_pass;
+    integer saved_fail;
+
+    // =========================================================
+    // TASK: step
+    //   Advances exactly one instruction cycle.
+    //   Waits for the rising edge that commits the result,
+    //   then waits 2 ns for combinational outputs to settle.
+    // =========================================================
+    task step;
+        begin
+            @(posedge clk);
+            #2;
+        end
+    endtask
+
+    // =========================================================
+    // TASK: check_reg
+    //   Selects register rnum via dbg_reg_sel, waits 1 ns for
+    //   the combinational read path to settle, then compares
+    //   dbg_reg_data against expected.
+    // =========================================================
+    task check_reg;
+        input  [3:0]   rnum;
+        input  [31:0]  expected;
+        input  [479:0] desc;
+        reg    [31:0]  got;
+        begin
+            dbg_reg_sel = rnum;
+            #1;
+            got      = dbg_reg_data;
+            test_num = test_num + 1;
+
+            if (got === expected) begin
+                $display("    [PASS] T%02d  R%-2d = 0x%08X          %0s",
+                         test_num, rnum, got, desc);
+                pass_count = pass_count + 1;
+            end else begin
+                $display("    [FAIL] T%02d  R%-2d  got=0x%08X  exp=0x%08X  %0s",
+                         test_num, rnum, got, expected, desc);
+                fail_count = fail_count + 1;
+            end
+        end
+    endtask
+
+    // =========================================================
+    // TASK: check_pc
+    //   Compares pc_out against expected.
+    //   pc_out is already stable after step() + 2 ns settle.
+    // =========================================================
+    task check_pc;
+        input  [31:0]  expected;
+        input  [479:0] desc;
+        begin
+            test_num = test_num + 1;
+
+            if (pc_out === expected) begin
+                $display("    [PASS] T%02d  PC  = 0x%08X          %0s",
+                         test_num, pc_out, desc);
+                pass_count = pass_count + 1;
+            end else begin
+                $display("    [FAIL] T%02d  PC   got=0x%08X  exp=0x%08X  %0s",
+                         test_num, pc_out, expected, desc);
+                fail_count = fail_count + 1;
+            end
+        end
+    endtask
+
+    // =========================================================
+    // TASK: check_not_equal
+    //   Verifies a register does NOT hold a forbidden value.
+    //   Used to confirm dead code was NOT executed.
+    // =========================================================
+    task check_not_equal;
+        input  [3:0]   rnum;
+        input  [31:0]  forbidden;
+        input  [479:0] desc;
+        reg    [31:0]  got;
+        begin
+            dbg_reg_sel = rnum;
+            #1;
+            got      = dbg_reg_data;
+            test_num = test_num + 1;
+
+            if (got !== forbidden) begin
+                $display("    [PASS] T%02d  R%-2d = 0x%08X (not 0x%08X) %0s",
+                         test_num, rnum, got, forbidden, desc);
+                pass_count = pass_count + 1;
+            end else begin
+                $display("    [FAIL] T%02d  R%-2d = 0x%08X MATCHES FORBIDDEN VALUE  %0s",
+                         test_num, rnum, got, desc);
+                fail_count = fail_count + 1;
+            end
+        end
+    endtask
+
+    // =========================================================
+    // TASK: section_start
+    //   Prints section header and saves current counters.
+    // =========================================================
+    task section_start;
+        input [479:0] title;
+        begin
+            $display("");
+            $display("  +------------------------------------------------------+");
+            $display("  | %-52s |", title);
+            $display("  +------------------------------------------------------+");
+            saved_pass = pass_count;
+            saved_fail = fail_count;
+        end
+    endtask
+
+    // =========================================================
+    // TASK: section_end
+    //   Prints per-section pass/fail subtotal.
+    // =========================================================
+    task section_end;
+        begin
+            sec_pass = pass_count - saved_pass;
+            sec_fail = fail_count - saved_fail;
+            if (sec_fail == 0)
+                $display("  | Result: ALL %0d PASSED                                  |",
+                         sec_pass);
+            else
+                $display("  | Result: %0d passed,  %0d FAILED  <-- fix this module    |",
+                         sec_pass, sec_fail);
+            $display("  +------------------------------------------------------+");
+        end
+    endtask
+
+    // =========================================================
+    // MAIN
+    // =========================================================
+    initial begin
+
+        // ---- Initialise counters ----
+        pass_count  = 0;
+        fail_count  = 0;
+        test_num    = 0;
+        reset       = 1'b1;
+        dbg_reg_sel = 4'd0;
+
+        $display("");
+        $display("  ######################################################");
+        $display("  #   ARM SINGLE-CYCLE PROCESSOR — DIAGNOSTIC TB       #");
+        $display("  #   Each section targets one specific module.         #");
+        $display("  #   A failing section = problem in that module.       #");
+        $display("  ######################################################");
+
+        // ---- Reset: hold for 2 rising edges ----
+        // t=5  posedge: PC=0 (reset=1 forces flopr output to 0)
+        // t=15 posedge: PC=0 (still in reset)
+        // t=17: reset released (2 ns after posedge, safely between edges)
+        // t=25 posedge: first real execution cycle
+        repeat(2) @(posedge clk);
+        #2;
+        reset = 1'b0;
+        $display("");
+        $display("  [INFO] Reset released at t=%0t ns", $time);
+
+        // =========================================================
+        // SECTION 1: flopr.v — PC Register
+        //
+        // flopr is the synchronous flip-flop used as the PC.
+        // Expected behaviour:
+        //   - During / just after reset: PC = 0x00000000
+        //   - After each rising edge:   PC increments by 4
+        //     (single-cycle processor, one instruction per cycle)
+        //
+        // If this section fails:
+        //   - Check flopr.v always@(posedge clk) block
+        //   - Check reset is wired to flopr in datapath.v
+        //   - Check pcnext wire is connected (pcsrc mux)
+        // =========================================================
+        section_start("Section 1 — flopr.v  (PC Register)");
+
+        // At t=17 (just after reset released, before next posedge):
+        // PC should still be 0 — flopr holds reset value.
+        #1;
+        check_pc(32'h00000000,
+                 "flopr: PC=0x00 immediately after reset");
+
+        step;   // Cycle 1 commits: MOV R0,#0xAA executed, PC -> 0x04
+        check_pc(32'h00000004,
+                 "flopr: PC advanced to 0x04 after cycle 1");
+
+        step;   // Cycle 2: MOV R1,#0x55, PC -> 0x08
+        check_pc(32'h00000008,
+                 "flopr: PC advanced to 0x08 after cycle 2");
+
+        step;   // Cycle 3: MOV R2,R15, PC -> 0x0C
+        check_pc(32'h0000000C,
+                 "flopr: PC advanced to 0x0C after cycle 3");
+
+        section_end;
+
+        // =========================================================
+        // SECTION 2: imem.v — Instruction Memory
+        //
+        // imem fetches the 32-bit instruction at address PC.
+        // We verify fetch indirectly: if the correct instruction
+        // was fetched and executed, the destination register holds
+        // the expected value.
+        //
+        // Cycles 1-3 already ran above.  R0, R1, R2 values prove
+        // imem returned the correct words at 0x00, 0x04, 0x08.
+        //
+        // If this section fails but Section 1 passes:
+        //   - Check imem.v $readmemh filename matches memfile.dat
+        //   - Check addr[31:2] word-addressing (not byte-addressing)
+        //   - Verify memfile.dat was replaced with diag_memfile.dat
+        // =========================================================
+        section_start("Section 2 — imem.v   (Instruction Memory)");
+
+        // R0=0xAA proves 0x00 (E3A000AA = MOV R0,#0xAA) was fetched
+        check_reg(4'd0, 32'h000000AA,
+                  "imem: fetched E3A000AA at 0x00 -> R0=0xAA");
+
+        // R1=0x55 proves 0x04 (E3A01055 = MOV R1,#0x55) was fetched
+        check_reg(4'd1, 32'h00000055,
+                  "imem: fetched E3A01055 at 0x04 -> R1=0x55");
+
+        // R2=0x10 proves 0x08 (E1A0200F = MOV R2,R15) was fetched
+        // (R2 result depends on adder too — if wrong, check both)
+        check_reg(4'd2, 32'h00000010,
+                  "imem: fetched E1A0200F at 0x08 -> R2=PC+8=0x10");
+
+        section_end;
+
+        // =========================================================
+        // SECTION 3: regfile.v — Register File
+        //
+        // regfile stores 15 general-purpose registers (R0-R14).
+        // R15 is supplied externally as PC+8.
+        // Writes are synchronous; reads are combinational.
+        //
+        // The checks here test:
+        //   1. Write: MOV wrote the correct value to R0 and R1
+        //   2. Read : dbg_reg_data returns the correct register
+        //   3. R15  : read-back should be current PC+8
+        //
+        // If this section fails but Section 2 passes:
+        //   - Check regfile.v write enable (we3 / regwrite)
+        //   - Check wa3 address mux (instr[15:12] vs link path)
+        //   - Check R15 bypass: (ra == 4'd15) ? r15 : rf[ra]
+        //   - Check dbg_data port wiring in top_level.v
+        // =========================================================
+        section_start("Section 3 — regfile.v (Register File)");
+
+        // After 3 cycles: R0=0xAA (cycle 1), R1=0x55 (cycle 2)
+        check_reg(4'd0, 32'h000000AA,
+                  "regfile: R0 write+read (MOV R0,#0xAA)");
+        check_reg(4'd1, 32'h00000055,
+                  "regfile: R1 write+read (MOV R1,#0x55)");
+
+        // R15 read-back: MOV R2,R15 at PC=0x08 -> R2 = 0x08+8 = 0x10
+        // This also tests the R15 bypass in regfile.v
+        check_reg(4'd2, 32'h00000010,
+                  "regfile: R15 bypass -> R2=PC+8=0x10");
+
+        // Two different registers in the same read cycle
+        // (tests that dbg_reg_sel correctly selects between them)
+        check_reg(4'd0, 32'h000000AA,
+                  "regfile: re-read R0 still 0xAA (no corruption)");
+        check_reg(4'd1, 32'h00000055,
+                  "regfile: re-read R1 still 0x55 (no corruption)");
+
+        section_end;
+
+        // =========================================================
+        // SECTION 4: adder.v — PC Adders (PC+4 and PC+8)
+        //
+        // Two adder instances exist in the datapath:
+        //   add4: PC + 4  -> feeds pcnext (sequential execution)
+        //   add8: PC + 8  -> feeds R15 in regfile (ARM pipeline)
+        //
+        // PC+4 is tested implicitly by PC advancing correctly
+        // (already verified in Section 1).
+        //
+        // PC+8 is tested explicitly: MOV R2, R15 at PC=0x08
+        // should produce R2 = 0x08 + 8 = 0x10.
+        //
+        // If this section fails but Section 3 passes:
+        //   - Check adder.v assign y = a + b;
+        //   - Check pcplus8 wire connects to regfile r15 port
+        // =========================================================
+        section_start("Section 4 — adder.v  (PC+4 and PC+8)");
+
+        // PC+4: PC was 0x00 after reset, incremented to 0x04 after 1 cycle.
+        // That is a PC+4 operation.
+        check_pc(32'h0000000C,
+                 "adder(+4): PC=0x0C (advanced from 0x08 by +4)");
+
+        // PC+8: R2 = R15 = PC+8.  Instruction at 0x08, so R2 = 0x10.
+        check_reg(4'd2, 32'h00000010,
+                  "adder(+8): MOV R2,R15 -> R2=0x08+8=0x10");
+
+        section_end;
+
+        // =========================================================
+        // SECTION 5: alu.v — Arithmetic Logic Unit
+        //
+        // Tests all four operations defined in the ISA:
+        //   ADD  (alucontrol=3'b000): R3+R4 = 10+3 = 13
+        //   SUB  (alucontrol=3'b001): R3-R4 = 10-3 =  7
+        //   AND  (alucontrol=3'b010): R3&R4 = 10&3 =  2
+        //   ORR  (alucontrol=3'b011): R3|R4 = 10|3 = 11
+        //
+        // MOV (PASS B, alucontrol=3'b101) is tested throughout
+        // all other sections (every MOV immediate or register
+        // uses the pass-B operation).
+        //
+        // If ADD passes but SUB fails: check SUB subtraction logic
+        // If all fail: check decoder.v cmd->alucontrol mapping
+        // =========================================================
+        section_start("Section 5 — alu.v    (ALU Operations)");
+
+        // Setup: R3=10 (cycle 4), R4=3 (cycle 5)
+        step;  // cycle 4: MOV R3, #10
+        step;  // cycle 5: MOV R4, #3
+        check_reg(4'd3, 32'h0000000A, "alu: setup R3=10");
+        check_reg(4'd4, 32'h00000003, "alu: setup R4=3");
+
+        // ADD
+        step;  // cycle 6: ADD R5, R3, R4
+        check_reg(4'd5, 32'h0000000D,
+                  "alu: ADD R5,R3,R4  10+3=13");
+
+        // SUB
+        step;  // cycle 7: SUB R6, R3, R4
+        check_reg(4'd6, 32'h00000007,
+                  "alu: SUB R6,R3,R4  10-3=7");
+
+        // AND  (0x0A & 0x03 = 0x02)
+        step;  // cycle 8: AND R7, R3, R4
+        check_reg(4'd7, 32'h00000002,
+                  "alu: AND R7,R3,R4  0xA&0x3=0x2");
+
+        // ORR  (0x0A | 0x03 = 0x0B)
+        step;  // cycle 9: ORR R8, R3, R4
+        check_reg(4'd8, 32'h0000000B,
+                  "alu: ORR R8,R3,R4  0xA|0x3=0xB");
+
+        section_end;
+
+        // =========================================================
+        // SECTION 6: shifter.v — Barrel Shifter
+        //
+        // Tests all four ARM shift types:
+        //   LSL  sh=2'b00: logical left  shift (fill with 0)
+        //   LSR  sh=2'b01: logical right shift (fill with 0)
+        //   ASR  sh=2'b10: arithmetic right shift (fill with sign)
+        //   ROR  sh=2'b11: rotate right (wraps bits)
+        //
+        // Arithmetic verification:
+        //   R3 LSL #2 : 10 << 2   = 40 = 0x28
+        //   R3 LSR #1 : 10 >> 1   =  5
+        //   R11 ASR#1 : 0xFFFFFFF6 >> 1 = 0xFFFFFFFB  (-5)
+        //   R1 ROR #4 : 0xFF ROR 4
+        //               = (0xFF >> 4) | (0xFF << 28)
+        //               = 0x0000000F | 0xF0000000
+        //               = 0xF000000F
+        //
+        // If only ASR fails: check $signed cast in shifter.v
+        // If only ROR fails: check the (32-shamt) wrap formula
+        // =========================================================
+        section_start("Section 6 — shifter.v (Barrel Shifter)");
+
+        // LSL: R9 = R3 LSL #2 = 10 << 2 = 40
+        step;  // cycle 10: MOV R9, R3 LSL#2
+        check_reg(4'd9, 32'h00000028,
+                  "shifter: LSL  R9=R3 LSL#2  10<<2=40");
+
+        // LSR: R10 = R3 LSR #1 = 10 >> 1 = 5
+        step;  // cycle 11: MOV R10, R3 LSR#1
+        check_reg(4'd10, 32'h00000005,
+                  "shifter: LSR  R10=R3 LSR#1  10>>1=5");
+
+        // ASR setup: R11 = 0 - R3 = -10 = 0xFFFFFFF6
+        step;  // cycle 12: MOV R11, #0
+        step;  // cycle 13: SUB R11, R11, R3   (0 - 10 = -10)
+        check_reg(4'd11, 32'hFFFFFFF6,
+                  "shifter: ASR setup R11=-10=0xFFFFFFF6");
+
+        // ASR: R12 = R11 ASR #1 = 0xFFFFFFF6 >>> 1 = 0xFFFFFFFB
+        step;  // cycle 14: MOV R12, R11 ASR#1
+        check_reg(4'd12, 32'hFFFFFFFB,
+                  "shifter: ASR  R12=R11 ASR#1  -10>>>1=-5=0xFFFFFFFB");
+
+        // ROR setup: R1 = 0xFF
+        step;  // cycle 15: MOV R1, #0xFF
+        check_reg(4'd1, 32'h000000FF,
+                  "shifter: ROR setup R1=0xFF");
+
+        // ROR: R2 = R1 ROR #4 = 0xF000000F
+        step;  // cycle 16: MOV R2, R1 ROR#4
+        check_reg(4'd2, 32'hF000000F,
+                  "shifter: ROR  R2=R1 ROR#4  0xFF ROR 4=0xF000000F");
+
+        section_end;
+
+        // =========================================================
+        // SECTION 7: extend.v — Immediate Extender
+        //
+        // The extender handles three formats (selected by immsrc):
+        //   immsrc=2'b00: rotate-right imm8 (data-processing, I=1)
+        //   immsrc=2'b01: zero-extend imm12  (memory offset)
+        //   immsrc=2'b10: sign-extend+shift imm24 (branch offset)
+        //
+        // This section tests immsrc=2'b00 (rotate-immediate):
+        //   Instruction: MOV R3, #0x01 with rot_field=4
+        //   Computation: 0x01 ROR (4*2) = 0x01 ROR 8 = 0x01000000
+        //
+        // immsrc=2'b01 is tested in Section 8 (dmem: STR/LDR).
+        // immsrc=2'b10 is tested in Sections 14-16 (branches).
+        //
+        // If this section fails:
+        //   - Check the rotation: extimm = (imm8_32 >> rot) | (imm8_32 << (32-rot))
+        //   - Check rot = {instr[11:8], 1'b0}  (multiply rot_field by 2)
+        // =========================================================
+        section_start("Section 7 — extend.v (Immediate Extender)");
+
+        // MOV R3, #0x01 with rot_field=4 in bits[11:8]
+        // 0x01 ROR 8 = 0x01000000
+        step;  // cycle 17: MOV R3, #0x01000000  (E3A03401)
+        check_reg(4'd3, 32'h01000000,
+                  "extend: imm8=0x01 rot_field=4 -> 0x01 ROR 8 = 0x01000000");
+
+        section_end;
+
+        // =========================================================
+        // SECTION 8: dmem.v — Data Memory (STR + LDR)
+        //
+        // STR R4,[R5,#4]: address = R5+4 = 64+4 = 68
+        //                 Mem[68] <- R4 = 0x77
+        // LDR R4,[R5,#4]: address = R5+4 = 68
+        //                 R4 <- Mem[68] = 0x77
+        //
+        // The clear (MOV R4,#0) between STR and LDR ensures
+        // R4=0x77 after LDR is from memory, not a stale value.
+        //
+        // If STR appears to write but LDR reads wrong value:
+        //   - Check dmem.v word-addressing: addr[31:2]
+        //   - Check write enable timing (synchronous write)
+        // If R4 stays 0 after LDR:
+        //   - Check memtoreg mux in datapath.v
+        //   - Check LDR bit[20]=1 in decoder.v
+        // =========================================================
+        section_start("Section 8 — dmem.v   (Data Memory STR + LDR)");
+
+        step;  // cycle 18: MOV R4, #0x77
+        step;  // cycle 19: MOV R5, #64
+
+        check_reg(4'd4, 32'h00000077, "dmem: setup R4=0x77");
+        check_reg(4'd5, 32'h00000040, "dmem: setup R5=64=0x40");
+
+        step;  // cycle 20: STR R4,[R5,#4]  -> Mem[68]=0x77
+
+        step;  // cycle 21: MOV R4, #0  (clear R4 to verify LDR)
+        check_reg(4'd4, 32'h00000000,
+                  "dmem: R4 cleared to 0 before LDR");
+
+        step;  // cycle 22: LDR R4,[R5,#4]  -> R4=Mem[68]=0x77
+        check_reg(4'd4, 32'h00000077,
+                  "dmem: LDR R4,[R5,#4] addr=68 -> R4=0x77");
+
+        section_end;
+
+        // =========================================================
+        // SECTION 9: condlogic.v — Flag Register Storage
+        //
+        // CMP R7,R8 (both=7): R7-R8 = 0 -> Z flag must become 1.
+        // condlogic.v stores the Z flag when:
+        //   flagw[1]=1 (CMP sets this via decoder) AND
+        //   condex=1   (AL condition always passes)
+        //
+        // We cannot read the stored flag directly, but we verify
+        // it indirectly: the next BNE should NOT be taken because
+        // Z=1.  If BNE IS taken, the flag was NOT stored correctly.
+        //
+        // If this section fails:
+        //   - Check condlogic.v: flags_NZ <= aluflagsIn[3:2]
+        //   - Check decoder.v: CMP sets flagw=2'b11 unconditionally
+        //   - Check alu.v: flags[2] = (result == 0)
+        // =========================================================
+        section_start("Section 9 — condlogic.v  (Flag Storage via CMP)");
+
+        step;  // cycle 23: MOV R7, #7
+        step;  // cycle 24: MOV R8, #7
+        check_reg(4'd7, 32'h00000007, "condlogic: CMP setup R7=7");
+        check_reg(4'd8, 32'h00000007, "condlogic: CMP setup R8=7");
+
+        // CMP: R7-R8=0 -> Z=1.  If Z not stored, next tests fail.
+        step;  // cycle 25: CMP R7, R8
+        $display("    [INFO] CMP R7,R8 executed  (7-7=0, Z should become 1)");
+        $display("    [INFO] If Section 10 fails here, condlogic did not store Z.");
+
+        section_end;
+
+        // =========================================================
+        // SECTION 10: condcheck.v — Condition NE (Z=1, NOT taken)
+        //
+        // BNE at 0x64: NE condition (cond=0001) requires Z=0.
+        // After CMP R7,R8 set Z=1, BNE must NOT be taken.
+        //   NOT taken -> PC advances to 0x68 (sequential)
+        //   TAKEN     -> PC jumps to 0x6C (skips 0x68)
+        //
+        // MOV R9, #0x11 at 0x68 only executes if BNE NOT taken.
+        // R9=0x11 is therefore the proof of correct NE evaluation.
+        //
+        // If this section fails:
+        //   - Check condcheck.v: 4'b0001 (NE): condex = ~flags[2]
+        //   - Verify Z flag was stored (re-check Section 9)
+        //   - Check pcsrc = pcs & condex (condlogic.v line)
+        // =========================================================
+        section_start("Section 10 — condcheck.v  (BNE NOT taken when Z=1)");
+
+        step;  // cycle 26: BNE #0  (Z=1 -> NE fails -> NOT taken)
+
+        // PC should be 0x68 (next sequential: 0x64+4=0x68)
+        // NOT 0x6C (branch target: 0x64+8=0x6C)
+        check_pc(32'h00000068,
+                 "condcheck: BNE Z=1 -> PC=0x68 (not taken)");
+
+        step;  // cycle 27: MOV R9, #0x11  (only runs if BNE not taken)
+        check_reg(4'd9, 32'h00000011,
+                  "condcheck: NE not taken: 0x68 executed -> R9=0x11");
+
+        section_end;
+
+        // =========================================================
+        // SECTION 11: condcheck.v — Condition EQ (Z=0, NOT taken)
+        //
+        // CMP R10,R11 (5 vs 9): R10-R11=-4 -> Z=0.
+        // BEQ at 0x78: EQ condition requires Z=1.
+        // Since Z=0, BEQ must NOT be taken.
+        //   NOT taken -> PC = 0x7C
+        //   TAKEN     -> PC = 0x80 (skips 0x7C)
+        //
+        // MOV R12, #0x22 at 0x7C is proof.
+        //
+        // If this section fails:
+        //   - Check condcheck.v: 4'b0000 (EQ): condex = flags[2]
+        //   - Check that CMP correctly clears Z when result != 0
+        // =========================================================
+        section_start("Section 11 — condcheck.v  (BEQ NOT taken when Z=0)");
+
+        step;  // cycle 28: MOV R10, #5
+        step;  // cycle 29: MOV R11, #9
+        check_reg(4'd10, 32'h00000005, "condcheck: BEQ setup R10=5");
+        check_reg(4'd11, 32'h00000009, "condcheck: BEQ setup R11=9");
+
+        step;  // cycle 30: CMP R10, R11  (5-9=-4, Z=0)
+        $display("    [INFO] CMP R10,R11 executed  (5-9=-4, Z should become 0)");
+
+        step;  // cycle 31: BEQ #0  (Z=0 -> EQ fails -> NOT taken)
+        check_pc(32'h0000007C,
+                 "condcheck: BEQ Z=0 -> PC=0x7C (not taken)");
+
+        step;  // cycle 32: MOV R12, #0x22
+        check_reg(4'd12, 32'h00000022,
+                  "condcheck: EQ not taken: 0x7C executed -> R12=0x22");
+
+        section_end;
+
+        // =========================================================
+        // SECTION 12: condcheck.v — Condition EQ TAKEN (Z=1)
+        //
+        // CMP R5,R6 (both=3): Z=1.
+        // BEQ at 0xB0 must be TAKEN.
+        //   TAKEN     -> PC = 0xB8 (skips 0xB4: MOV R7,#0xFF)
+        //   NOT taken -> PC = 0xB4 -> R7=0xFF (wrong)
+        //
+        // MOV R7, #0xBB at 0xB8 is the proof.
+        // R7 must be 0xBB, not 0xFF.
+        //
+        // If this section fails:
+        //   - condcheck.v EQ case returns 0 even when Z=1
+        //   - Or pcsrc is always 0 (branch mechanism broken)
+        // =========================================================
+        section_start("Section 12 — condcheck.v  (BEQ TAKEN when Z=1)");
+
+        // Run cycles 33-43 to reach this section
+        step;  // cycle 33: B at 0x80 (needed to reach 0x88)
+        step;  // cycle 34: MOV R13,#0x44 at 0x88
+        step;  // cycle 35: BL at 0x8C
+        step;  // cycle 36: MOV R0,#0x55 at 0x98 (subroutine)
+        step;  // cycle 37: BX R14 at 0x9C
+        step;  // cycle 38: B #2 at 0x90
+        step;  // cycle 39: MOV R1,#0x66 at 0xA0
+        step;  // cycle 40: MOV R5,#3  at 0xA4
+        step;  // cycle 41: MOV R6,#3  at 0xA8
+        check_reg(4'd5, 32'h00000003, "condcheck: BEQ setup R5=3");
+        check_reg(4'd6, 32'h00000003, "condcheck: BEQ setup R6=3");
+
+        step;  // cycle 42: CMP R5,R6 (3-3=0, Z=1)
+        $display("    [INFO] CMP R5,R6 executed  (3-3=0, Z should become 1)");
+
+        step;  // cycle 43: BEQ #0  (Z=1 -> EQ passes -> TAKEN)
+        check_pc(32'h000000B8,
+                 "condcheck: BEQ Z=1 -> PC=0xB8 (TAKEN, skips 0xB4)");
+
+        step;  // cycle 44: MOV R7,#0xBB at 0xB8
+        check_reg(4'd7, 32'h000000BB,
+                  "condcheck: EQ taken: 0xB8 executed -> R7=0xBB");
+
+        // Verify dead code at 0xB4 was not executed
+        check_not_equal(4'd7, 32'h000000FF,
+                        "condcheck: dead code 0xB4 skipped: R7 != 0xFF");
+
+        section_end;
+
+        // =========================================================
+        // SECTION 13: condcheck.v — Condition NE TAKEN (Z=0)
+        //
+        // CMP R5,R6 (1 vs 2): Z=0.
+        // BNE at 0xC8 must be TAKEN.
+        //   TAKEN     -> PC = 0xD0 (skips 0xCC: MOV R8,#0xFF)
+        //   NOT taken -> PC = 0xCC -> R8=0xFF (wrong)
+        //
+        // MOV R8, #0x99 at 0xD0 is the proof.
+        //
+        // If this section fails:
+        //   - condcheck.v NE case returns 0 even when Z=0
+        //   - Or flag update from previous CMP was wrong (Z not cleared)
+        // =========================================================
+        section_start("Section 13 — condcheck.v  (BNE TAKEN when Z=0)");
+
+        step;  // cycle 45: MOV R5,#1  at 0xBC
+        step;  // cycle 46: MOV R6,#2  at 0xC0
+        check_reg(4'd5, 32'h00000001, "condcheck: BNE setup R5=1");
+        check_reg(4'd6, 32'h00000002, "condcheck: BNE setup R6=2");
+
+        step;  // cycle 47: CMP R5,R6  (1-2=-1, Z=0)
+        $display("    [INFO] CMP R5,R6 executed  (1-2=-1, Z should become 0)");
+
+        step;  // cycle 48: BNE #0  (Z=0 -> NE passes -> TAKEN)
+        check_pc(32'h000000D0,
+                 "condcheck: BNE Z=0 -> PC=0xD0 (TAKEN, skips 0xCC)");
+
+        step;  // cycle 49: MOV R8,#0x99 at 0xD0
+        check_reg(4'd8, 32'h00000099,
+                  "condcheck: NE taken: 0xD0 executed -> R8=0x99");
+
+        check_not_equal(4'd8, 32'h000000FF,
+                        "condcheck: dead code 0xCC skipped: R8 != 0xFF");
+
+        section_end;
+
+        // =========================================================
+        // NOTE: Sections 14-16 were executed mid-program (cycles
+        // 33-38).  We go back and verify their results now using
+        // the register values that were committed at that time.
+        //
+        // The values are still in the registers because nothing
+        // overwrites them in sections 12-13.
+        // =========================================================
+
+        // =========================================================
+        // SECTION 14: decoder.v — Unconditional Branch (B)
+        //
+        // B #0 at 0x80:
+        //   target = 0x80 + 8 + (0 << 2) = 0x88
+        //   Skips 0x84 (MOV R13, #0x33)
+        //   Lands at 0x88 (MOV R13, #0x44)
+        //
+        // R13=0x44 proves:
+        //   (a) B was taken (not sequential +4 to 0x84)
+        //   (b) decoder correctly set branch=1 and pcsrc=1
+        //
+        // If this section fails:
+        //   - decoder.v Op=2'b10 case does not set branch=1
+        //   - pcsrc wire disconnected in arm.v / top_level.v
+        //   - pcnext mux: assign pcnext = pcsrc ? aluresult : pcplus4
+        // =========================================================
+        section_start("Section 14 — decoder.v  (B unconditional branch)");
+
+        // R13 was set during cycle 34 (MOV R13,#0x44 at 0x88)
+        // It must be 0x44 not 0x33 (dead code at 0x84 was skipped)
+        check_reg(4'd13, 32'h00000044,
+                  "decoder: B taken: 0x84 skipped, 0x88 ran -> R13=0x44");
+        check_not_equal(4'd13, 32'h00000033,
+                        "decoder: dead code 0x84 NOT executed: R13 != 0x33");
+
+        section_end;
+
+        // =========================================================
+        // SECTION 15: decoder.v — Branch with Link (BL)
+        //
+        // BL #1 at 0x8C:
+        //   R14 = PC+4 = 0x8C+4 = 0x90  (return address saved)
+        //   PC  = 0x8C+8+(1<<2) = 0x98  (jumps to subroutine)
+        //   Skips 0x90 and 0x94 on the jump
+        //
+        // R0=0x55 proves: BL jumped to 0x98 (subroutine executed)
+        // R0!=0x33 proves: dead code at 0x94 never ran
+        // R14=0x90 proves: link register saved correctly
+        //
+        // If R14=0 but R0=0x55:
+        //   -> link=1 not set, or wa3_mux not selecting R14
+        // If R14=0x90 but R0!=0x55:
+        //   -> BL did not jump (pcsrc not set for branch)
+        // =========================================================
+        section_start("Section 15 — decoder.v  (BL Branch with Link)");
+
+        check_reg(4'd14, 32'h00000090,
+                  "decoder: BL saved R14=PC+4=0x8C+4=0x90");
+        check_reg(4'd0, 32'h00000055,
+                  "decoder: BL jumped to 0x98: subroutine ran -> R0=0x55");
+        check_not_equal(4'd0, 32'h00000033,
+                        "decoder: dead code 0x94 NOT executed: R0 != 0x33");
+
+        section_end;
+
+        // =========================================================
+        // SECTION 16: decoder.v — Branch and Exchange (BX)
+        //
+        // BX R14 at 0x9C  (encoding: E12FFF1E):
+        //   PC = R14 = 0x90
+        //
+        // BX uses the data-processing path:
+        //   op=00, funct=010010 (BX opcode), Rd=R15
+        //   alucontrol=PASS B, noshift=1 (bypass the shifter!)
+        //   pcs = (rd==R15 & regw) = 1
+        //
+        // The tricky part: instr[11:7]=11111 (shamt=31) and
+        // instr[6:5]=01 (LSR) are baked into E12FFF1E.
+        // Without noshift=1, the shifter would compute R14 LSR 31 = 0
+        // and PC would jump to 0x98 (wrong) instead of 0x90.
+        //
+        // After BX -> 0x90 -> B #2 -> 0xA0 -> MOV R1,#0x66
+        // R1=0x66 proves the full BX return chain worked.
+        //
+        // If R14=0x90 (BL correct) but BX fails:
+        //   -> noshift signal not in datapath.v
+        //   -> BX funct=010010 not detected in decoder.v
+        //   -> pcs not triggered for Rd=R15 in data-proc
+        // =========================================================
+        section_start("Section 16 — decoder.v  (BX Branch Exchange)");
+
+        // R1=0x66 was set at 0xA0 AFTER the BX returned to 0x90
+        // -> B #2 at 0x90 jumped to 0xA0 -> MOV R1,#0x66 ran
+        // This proves the full return chain: BX(0x9C)->0x90->B->0xA0
+        check_reg(4'd1, 32'h00000066,
+                  "decoder: BX->0x90->B#2->0xA0->R1=0x66 (full return)");
+
+        // R0 was set to 0x55 in subroutine (0x98).
+        // Nothing after that overwrites R0 (dead code at 0x94 skipped).
+        // R0=0x55 confirms the BX return path did not re-execute 0x94.
+        check_reg(4'd0, 32'h00000055,
+                  "decoder: BX returned correctly: R0 still 0x55");
+
+        section_end;
+
+        // =========================================================
+        // FINAL SUMMARY
+        // =========================================================
+        $display("");
+        $display("  ######################################################");
+        $display("  #               DIAGNOSTIC SUMMARY                   #");
+        $display("  ######################################################");
+        $display("  #  Total tests  : %3d                                #",
+                 test_num);
+        $display("  #  PASSED       : %3d                                #",
+                 pass_count);
+        $display("  #  FAILED       : %3d                                #",
+                 fail_count);
+        $display("  #

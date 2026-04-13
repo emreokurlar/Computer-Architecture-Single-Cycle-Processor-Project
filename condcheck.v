@@ -1,0 +1,30 @@
+module condcheck (
+    input  wire [3:0] cond,
+    input  wire [3:0] flags,        // {N, Z, C, V}
+    output reg        condex
+);
+    wire N, Z, C, V;
+    assign {N, Z, C, V} = flags;
+
+    always @(*) begin
+        case (cond)
+            4'b0000: condex = Z;               // EQ
+            4'b0001: condex = ~Z;              // NE
+            /*4'b0010: condex = C;               // CS
+            4'b0011: condex = ~C;              // CC
+            4'b0100: condex = N;               // MI
+            4'b0101: condex = ~N;              // PL
+            4'b0110: condex = V;               // VS
+            4'b0111: condex = ~V;              // VC
+            4'b1000: condex = C & ~Z;          // HI
+            4'b1001: condex = ~C | Z;          // LS
+            4'b1010: condex = (N == V);        // GE
+            4'b1011: condex = (N != V);        // LT
+            4'b1100: condex = ~Z & (N == V);   // GT
+            4'b1101: condex = Z  | (N != V);   // LE
+				*/
+            4'b1110: condex = 1'b1;            // AL (always)
+            default: condex = 1'b0;
+        endcase
+    end
+endmodule

@@ -1,0 +1,321 @@
+Info: Start Nativelink Simulation process
+
+========= EDA Simulation Settings =====================
+
+Sim Mode              :  Gate
+Family                :  cycloneiii
+Quartus root          :  c:/altera/13.0sp1/quartus/bin64/
+Quartus sim root      :  c:/altera/13.0sp1/quartus/eda/sim_lib
+Simulation Tool       :  modelsim-altera
+Simulation Language   :  verilog
+Simulation Mode       :  GUI
+Sim Output File       :  lab2.vo
+Sim SDF file          :  lab2__verilog.sdo
+Sim dir               :  simulation\modelsim
+
+=======================================================
+
+Info: Starting NativeLink simulation with ModelSim-Altera software
+Sourced NativeLink script c:/altera/13.0sp1/quartus/common/tcl/internal/nativelink/modelsim.tcl
+Warning: File lab2_run_msim_gate_verilog.do already exists - backing up current file as lab2_run_msim_gate_verilog.do.bak11
+Probing transcript
+ModelSim-Altera Info: # Reading C:/altera/13.0sp1/modelsim_ase_backup/tcl/vsim/pref.tcl 
+ModelSim-Altera Info: # do lab2_run_msim_gate_verilog.do 
+ModelSim-Altera Info: # if {[file exists gate_work]} {
+ModelSim-Altera Info: # 	vdel -lib gate_work -all
+ModelSim-Altera Info: # }
+ModelSim-Altera Info: # vlib gate_work
+ModelSim-Altera Info: # vmap work gate_work
+ModelSim-Altera Info: # Copying C:\altera\13.0sp1\modelsim_ase_backup\win32aloem/../modelsim.ini to modelsim.ini
+ModelSim-Altera Info: # Modifying modelsim.ini
+ModelSim-Altera Warning: # ** Warning: Copied C:\altera\13.0sp1\modelsim_ase_backup\win32aloem/../modelsim.ini to modelsim.ini.
+ModelSim-Altera Info: #          Updated modelsim.ini.
+ModelSim-Altera Info: # 
+ModelSim-Altera Info: # vlog -vlog01compat -work work +incdir+. {lab2.vo}
+ModelSim-Altera Info: # Model Technology ModelSim ALTERA vlog 10.1d Compiler 2012.11 Nov  2 2012
+ModelSim-Altera Info: # -- Compiling module top_level
+ModelSim-Altera Info: # 
+ModelSim-Altera Info: # Top level modules:
+ModelSim-Altera Info: # 	top_level
+ModelSim-Altera Info: # 
+ModelSim-Altera Info: # vlog -vlog01compat -work work +incdir+C:/Users/Emre/Desktop/446/446_lab/lab2 {C:/Users/Emre/Desktop/446/446_lab/lab2/tb_arm.v}
+ModelSim-Altera Info: # Model Technology ModelSim ALTERA vlog 10.1d Compiler 2012.11 Nov  2 2012
+ModelSim-Altera Info: # -- Compiling module tb_arm
+ModelSim-Altera Info: # 
+ModelSim-Altera Info: # Top level modules:
+ModelSim-Altera Info: # 	tb_arm
+ModelSim-Altera Info: # 
+ModelSim-Altera Info: # vsim -t 1ps +transport_int_delays +transport_path_delays -L altera_ver -L cycloneiii_ver -L gate_work -L work -voptargs="+acc"  tb_arm
+ModelSim-Altera Info: # vsim +transport_int_delays +transport_path_delays -L altera_ver -L cycloneiii_ver -L gate_work -L work -voptargs=\"+acc\" -t 1ps tb_arm 
+ModelSim-Altera Info: # Loading work.tb_arm
+ModelSim-Altera Info: # Loading work.top_level
+ModelSim-Altera Info: # Loading cycloneiii_ver.cycloneiii_io_ibuf
+ModelSim-Altera Info: # Loading cycloneiii_ver.cycloneiii_io_obuf
+ModelSim-Altera Info: # Loading cycloneiii_ver.cycloneiii_lcell_comb
+ModelSim-Altera Info: # Loading altera_ver.dffeas
+ModelSim-Altera Info: # Loading cycloneiii_ver.cycloneiii_clkctrl
+ModelSim-Altera Info: # Loading cycloneiii_ver.cycloneiii_mux41
+ModelSim-Altera Info: # Loading cycloneiii_ver.cycloneiii_ena_reg
+ModelSim-Altera Info: # SDF 10.1d Compiler 2012.11 Nov  2 2012
+ModelSim-Altera Info: # 
+ModelSim-Altera Info: # Loading instances from lab2_v.sdo
+ModelSim-Altera Info: # Loading altera_ver.PRIM_GDFF_LOW
+ModelSim-Altera Info: # Loading timing data from lab2_v.sdo
+ModelSim-Altera Info: # ** Note: (vsim-3587) SDF Backannotation Successfully Completed.
+ModelSim-Altera Info: #    Time: 0 ps  Iteration: 0  Instance: /tb_arm File: C:/Users/Emre/Desktop/446/446_lab/lab2/tb_arm.v
+ModelSim-Altera Info: # 
+ModelSim-Altera Info: # add wave *
+ModelSim-Altera Info: # view structure
+ModelSim-Altera Info: # .main_pane.structure.interior.cs.body.struct
+ModelSim-Altera Info: # view signals
+ModelSim-Altera Info: # .main_pane.objects.interior.cs.body.tree
+ModelSim-Altera Info: # run -all
+ModelSim-Altera Info: # 
+ModelSim-Altera Info: #   ########################################################
+ModelSim-Altera Info: #   #    ARM Single-Cycle Processor  Testbench v4          #
+ModelSim-Altera Info: #   #    Gate-Level  Clock=200ns  +notimingchecks required #
+ModelSim-Altera Info: #   ########################################################
+ModelSim-Altera Info: # 
+ModelSim-Altera Info: #   [INFO] Reset released at t=402000 ps
+ModelSim-Altera Info: #   [INFO] First instruction posedge in ~98ns.
+ModelSim-Altera Info: # 
+ModelSim-Altera Info: #   ========================================================
+ModelSim-Altera Info: #   PHASE ÿÿÿ€” Execution Trace (negedge sampling)
+ModelSim-Altera Info: #   ========================================================
+ModelSim-Altera Info: #   [TRC] CYC=01  PC=0x00000004  ->  ADD  R2, R1, R1
+ModelSim-Altera Info: #   [TRC] CYC=02  PC=0x00000008  ->  AND  R3, R1, R2
+ModelSim-Altera Info: #   [TRC] CYC=03  PC=0x0000000c  ->  B    #0     [TAKEN -> 0x14, skip 0x10]
+ModelSim-Altera Info: #   [TRC] CYC=04  PC=0x00000010  ->  !! 0x10 reached: B DID NOT SKIP !!
+ModelSim-Altera Info: #   [TRC] CYC=05  PC=0x00000014  ->  MOV  R4, R1 LSL #2
+ModelSim-Altera Info: #   [TRC] CYC=06  PC=0x00000018  ->  SUB  R5, R1, R2 LSR #2
+ModelSim-Altera Info: #   [TRC] CYC=07  PC=0x0000001c  ->  ORR  R6, R3, R3 ROR #2
+ModelSim-Altera Info: #   [TRC] CYC=08  PC=0x00000020  ->  MOV  R7, R6 ASR #28
+ModelSim-Altera Info: #   [TRC] CYC=09  PC=0x00000024  ->  STR  R2, [R1, #85]
+ModelSim-Altera Info: #   [TRC] CYC=10  PC=0x00000028  ->  LDR  R8, [R3, #102]
+ModelSim-Altera Info: #   [TRC] CYC=11  PC=0x0000002c  ->  CMP  R2, R8   [Z<-1 if R2==R8]
+ModelSim-Altera Info: #   [TRC] CYC=12  PC=0x00000030  ->  BNE  #18      [NOT taken, Z=1]
+ModelSim-Altera Info: #   [TRC] CYC=13  PC=0x00000034  ->  BEQ  #0       [TAKEN -> 0x3C, Z=1]
+ModelSim-Altera Info: #   [TRC] CYC=14  PC=0x00000038  ->  !! 0x38 reached: BEQ DID NOT JUMP !!
+ModelSim-Altera Info: #   [TRC] CYC=15  PC=0x0000003c  ->  BL   #1       [R14<-0x40, PC->0x48]
+ModelSim-Altera Info: #   [TRC] CYC=16  PC=0x00000040  ->  ANDEQ R0,R0,R0 [EQ passes Z=1]
+ModelSim-Altera Info: #   [TRC] CYC=17  PC=0x00000044  ->  MOV  R0, #0x330
+ModelSim-Altera Info: #   [TRC] CYC=18  PC=0x00000048  ->  BX   R14       [PC<-R14=0x40, loop]
+ModelSim-Altera Info: #   [TRC] CYC=19  PC=0x0000004c  ->  !! UNEXPECTED PC 0x0000004c !!
+ModelSim-Altera Info: #   [TRC] CYC=20  PC=0x00000050  ->  !! UNEXPECTED PC 0x00000050 !!
+ModelSim-Altera Info: #   [TRC] CYC=21  PC=0x00000054  ->  !! UNEXPECTED PC 0x00000054 !!
+ModelSim-Altera Info: #   [TRC] CYC=22  PC=0x00000058  ->  !! UNEXPECTED PC 0x00000058 !!
+ModelSim-Altera Info: # 
+ModelSim-Altera Info: #   ========================================================
+ModelSim-Altera Info: #   PHASEÿÿÿâÿ” Data-Processing Registers
+ModelSim-Altera Info: #   ========================================================
+ModelSim-Altera Info: # 
+ModelSim-Altera Info: #   [FAIL] Test 01  R1   got=0x00000000  exp=0x00000013  MOV R1,#0x13                  R1=19
+ModelSim-Altera Info: #   [FAIL] Test 02  R2   got=0x00000000  exp=0x00000026  ADD R2,R1,R1                  R2=38
+ModelSim-Altera Info: #   [FAIL] Test 03  R3   got=0x00000000  exp=0x00000002  AND R3,R1,R2  (0x13&0x26)     R3=2
+ModelSim-Altera Info: #   [FAIL] Test 04  R4   got=0x00000000  exp=0x0000004c  MOV R4,R1 LSL#2  (19<<2)      R4=76
+ModelSim-Altera Info: #   [FAIL] Test 05  R5   got=0x00000000  exp=0x0000000a  SUB R5,R1,R2 LSR#2 (19-9)     R5=10
+ModelSim-Altera Info: #   [FAIL] Test 06  R6   got=0x00000000  exp=0x80000002  ORR R6,R3,R3 ROR#2            R6=0x80000002
+ModelSim-Altera Info: #   [FAIL] Test 07  R7   got=0x00000000  exp=0xfffffff8  MOV R7,R6 ASR#28              R7=0xFFFFFFF8
+ModelSim-Altera Info: # 
+ModelSim-Altera Info: #   ========================================================
+ModelSim-Altera Info: #   PHASE 3ÿÿÿ” Memory Instructions (STR + LDR)
+ModelSim-Altera Info: #   ========================================================
+ModelSim-Altera Info: # 
+ModelSim-Altera Info: #   STR R2,[R1,#85]  addr=19+85=104
+ModelSim-Altera Info: #   LDR R8,[R3,#102] addr=2+102=104 (same word)
+ModelSim-Altera Info: #   R8 must equal R2 = 38 = 0x26
+ModelSim-Altera Info: # 
+ModelSim-Altera Info: #   [FAIL] Test 08  R8   got=0x00000000  exp=0x00000026  LDR loaded STR value          R8=38=0x26
+ModelSim-Altera Info: # 
+ModelSim-Altera Info: #   ========================================================
+ModelSim-Altera Info: #   PHASE 4ÿÿÿ” Branch Instructions
+ModelSim-Altera Info: #   ========================================================
+ModelSim-Altera Info: # 
+ModelSim-Altera Info: #   B #0 at 0x0C: R4=76 proves 0x14 executed.
+ModelSim-Altera Info: #   [FAIL] Test 09  R4   got=0x00000000  exp=0x0000004c  B taken -> 0x14 ran           R4=76=0x4C
+ModelSim-Altera Info: #   CMP R2,R8 at 0x2C: R2-R8=38-38=0, Z should be 1.
+ModelSim-Altera Info: #   [FAIL] Test 10  R2   got=0x00000000  exp=0x00000026  CMP left  operand             R2=38
+ModelSim-Altera Info: #   [FAIL] Test 11  R8   got=0x00000000  exp=0x00000026  CMP right operand             R8=38
+ModelSim-Altera Info: #   BL at 0x3C: R14 should be 0x3C+4=0x40.
+ModelSim-Altera Info: #   [FAIL] Test 12  R14  got=0x00000000  exp=0x00000040  BL saved return address       R14=0x40
+ModelSim-Altera Info: #   BX at 0x48: loop through 0x44 sets R0=0x330.
+ModelSim-Altera Info: #   [FAIL] Test 13  R0   got=0x00000000  exp=0x00000330  BX loop -> MOV R0,#0x330 ran  R0=0x330
+ModelSim-Altera Info: #   PC must be cycling {0x40, 0x44, 0x48}.
+ModelSim-Altera Info: #   [FAIL] Test 14  PC=0x0000008c NOT in {0x00000040,0x00000044,0x00000048}  PC inside BX loop
+ModelSim-Altera Info: # 
+ModelSim-Altera Info: #   ========================================================
+ModelSim-Altera Info: #   PHASEÿÿÿâÿ” Conditional Logic Summary
+ModelSim-Altera Info: #   ========================================================
+ModelSim-Altera Info: # 
+ModelSim-Altera Info: #   AL: R1..R8 correct -> all AL instructions ran.
+ModelSim-Altera Info: #   EQ: R14=0x40 -> BEQ was taken -> EQ condition works.
+ModelSim-Altera Info: #   NE: R14=0x40 -> BNE was NOT taken -> NE condition works.
+ModelSim-Altera Info: # 
+ModelSim-Altera Info: #   [FAIL] Test 15  CMP did NOT set Z=1 correctly: R14 != 0x40
+ModelSim-Altera Info: #   [FAIL] Test 16  BNE wrongly taken: R14 != 0x40
+ModelSim-Altera Info: # 
+ModelSim-Altera Info: #   ########################################################
+ModelSim-Altera Info: #   #                   FINAL SUMMARY                      #
+ModelSim-Altera Info: #   ########################################################
+ModelSim-Altera Info: #   #  Total tests  :  16                                  #
+ModelSim-Altera Info: #   #  PASSED       :   0                                  #
+ModelSim-Altera Info: #   #  FAILED       :  16                                  #
+ModelSim-Altera Info: #   #  Consistency  : pass+fail= 16 (must equal total)     #
+ModelSim-Altera Info: #   #------------------------------------------------------#
+ModelSim-Altera Info: #   #  RESULT: ***  16 TEST(S) FAILED -- SEE ABOVE ***     #
+ModelSim-Altera Info: #   #------------------------------------------------------#
+ModelSim-Altera Info: #   #  If ALL registers = 0:                               #
+ModelSim-Altera Info: #   #    +notimingchecks missing from vsim command         #
+ModelSim-Altera Info: #   #    Use run_tb_arm_gate.do instead of auto .do file   #
+ModelSim-Altera Info: #   #  If values have extra bits (e.g. 0x42 not 0x02):    #
+ModelSim-Altera Info: #   #    Same cause: +notimingchecks missing               #
+ModelSim-Altera Info: #   #  If PC shows UNEXPECTED addresses:                   #
+ModelSim-Altera Info: #   #    branches fail -> pcsrc wiring in arm.v            #
+ModelSim-Altera Info: #   ########################################################
+ModelSim-Altera Info: # 
+ModelSim-Altera Info: # ** Note: $finish    : C:/Users/Emre/Desktop/446/446_lab/lab2/tb_arm.v(426)
+ModelSim-Altera Info: #    Time: 7590 ns  Iteration: 0  Instance: /tb_arm
+ModelSim-Altera Info: # 1
+ModelSim-Altera Info: # Break in Module tb_arm at C:/Users/Emre/Desktop/446/446_lab/lab2/tb_arm.v line 426
+ModelSim-Altera Info: # Simulation Breakpoint: 1
+ModelSim-Altera Info: # Break in Module tb_arm at C:/Users/Emre/Desktop/446/446_lab/lab2/tb_arm.v line 426
+ModelSim-Altera Info: # MACRO ./lab2_run_msim_gate_verilog.do PAUSED at line 17
+ModelSim-Altera Info: vsim -t 1ps \
+ModelSim-Altera Info:      +transport_int_delays \
+ModelSim-Altera Info:      +transport_path_delays \
+ModelSim-Altera Info:      +notimingchecks \
+ModelSim-Altera Info:      -L altera_ver \
+ModelSim-Altera Info:      -L cycloneiii_ver \
+ModelSim-Altera Info:      -L gate_work \
+ModelSim-Altera Info:      -L work \
+ModelSim-Altera Info:      -voptargs="+acc" \
+ModelSim-Altera Info:      tb_arm
+ModelSim-Altera Info: # vsim +notimingchecks +transport_int_delays +transport_path_delays -L altera_ver -L cycloneiii_ver -L gate_work -L work -voptargs=\"+acc\" -t 1ps tb_arm 
+ModelSim-Altera Info: # Loading work.tb_arm
+ModelSim-Altera Info: # Loading work.top_level
+ModelSim-Altera Info: # Loading cycloneiii_ver.cycloneiii_io_ibuf
+ModelSim-Altera Info: # Loading cycloneiii_ver.cycloneiii_io_obuf
+ModelSim-Altera Info: # Loading cycloneiii_ver.cycloneiii_lcell_comb
+ModelSim-Altera Info: # Loading altera_ver.dffeas
+ModelSim-Altera Info: # Loading cycloneiii_ver.cycloneiii_clkctrl
+ModelSim-Altera Info: # Loading cycloneiii_ver.cycloneiii_mux41
+ModelSim-Altera Info: # Loading cycloneiii_ver.cycloneiii_ena_reg
+ModelSim-Altera Info: # Loading instances from lab2_v.sdo
+ModelSim-Altera Info: # Loading altera_ver.PRIM_GDFF_LOW
+ModelSim-Altera Info: # Loading timing data from lab2_v.sdo
+ModelSim-Altera Info: # ** Note: (vsim-3587) SDF Backannotation Successfully Completed.
+ModelSim-Altera Info: #    Time: 0 ps  Iteration: 0  Instance: /tb_arm File: C:/Users/Emre/Desktop/446/446_lab/lab2/tb_arm.v
+ModelSim-Altera Info: add wave *
+ModelSim-Altera Info: view structure
+ModelSim-Altera Info: # .main_pane.structure.interior.cs.body.struct
+ModelSim-Altera Info: view signals
+ModelSim-Altera Info: # .main_pane.objects.interior.cs.body.tree
+ModelSim-Altera Info: run -all
+ModelSim-Altera Info: # 
+ModelSim-Altera Info: #   ########################################################
+ModelSim-Altera Info: #   #    ARM Single-Cycle Processor  Testbench v4          #
+ModelSim-Altera Info: #   #    Gate-Level  Clock=200ns  +notimingchecks required #
+ModelSim-Altera Info: #   ########################################################
+ModelSim-Altera Info: # 
+ModelSim-Altera Info: #   [INFO] Reset released at t=402000 ps
+ModelSim-Altera Info: #   [INFO] First instruction posedge in ~98ns.
+ModelSim-Altera Info: # 
+ModelSim-Altera Info: #   ========================================================
+ModelSim-Altera Info: #   PHASE ÿÿÿ€” Execution Trace (negedge sampling)
+ModelSim-Altera Info: #   ========================================================
+ModelSim-Altera Info: #   [TRC] CYC=01  PC=0x00000004  ->  ADD  R2, R1, R1
+ModelSim-Altera Info: #   [TRC] CYC=02  PC=0x00000008  ->  AND  R3, R1, R2
+ModelSim-Altera Info: #   [TRC] CYC=03  PC=0x0000000c  ->  B    #0     [TAKEN -> 0x14, skip 0x10]
+ModelSim-Altera Info: #   [TRC] CYC=04  PC=0x00000010  ->  !! 0x10 reached: B DID NOT SKIP !!
+ModelSim-Altera Info: #   [TRC] CYC=05  PC=0x00000014  ->  MOV  R4, R1 LSL #2
+ModelSim-Altera Info: #   [TRC] CYC=06  PC=0x00000018  ->  SUB  R5, R1, R2 LSR #2
+ModelSim-Altera Info: #   [TRC] CYC=07  PC=0x0000001c  ->  ORR  R6, R3, R3 ROR #2
+ModelSim-Altera Info: #   [TRC] CYC=08  PC=0x00000020  ->  MOV  R7, R6 ASR #28
+ModelSim-Altera Info: #   [TRC] CYC=09  PC=0x00000024  ->  STR  R2, [R1, #85]
+ModelSim-Altera Info: #   [TRC] CYC=10  PC=0x00000028  ->  LDR  R8, [R3, #102]
+ModelSim-Altera Info: #   [TRC] CYC=11  PC=0x0000002c  ->  CMP  R2, R8   [Z<-1 if R2==R8]
+ModelSim-Altera Info: #   [TRC] CYC=12  PC=0x00000030  ->  BNE  #18      [NOT taken, Z=1]
+ModelSim-Altera Info: #   [TRC] CYC=13  PC=0x00000034  ->  BEQ  #0       [TAKEN -> 0x3C, Z=1]
+ModelSim-Altera Info: #   [TRC] CYC=14  PC=0x00000038  ->  !! 0x38 reached: BEQ DID NOT JUMP !!
+ModelSim-Altera Info: #   [TRC] CYC=15  PC=0x0000003c  ->  BL   #1       [R14<-0x40, PC->0x48]
+ModelSim-Altera Info: #   [TRC] CYC=16  PC=0x00000040  ->  ANDEQ R0,R0,R0 [EQ passes Z=1]
+ModelSim-Altera Info: #   [TRC] CYC=17  PC=0x00000044  ->  MOV  R0, #0x330
+ModelSim-Altera Info: #   [TRC] CYC=18  PC=0x00000048  ->  BX   R14       [PC<-R14=0x40, loop]
+ModelSim-Altera Info: #   [TRC] CYC=19  PC=0x0000004c  ->  !! UNEXPECTED PC 0x0000004c !!
+ModelSim-Altera Info: #   [TRC] CYC=20  PC=0x00000050  ->  !! UNEXPECTED PC 0x00000050 !!
+ModelSim-Altera Info: #   [TRC] CYC=21  PC=0x00000054  ->  !! UNEXPECTED PC 0x00000054 !!
+ModelSim-Altera Info: #   [TRC] CYC=22  PC=0x00000058  ->  !! UNEXPECTED PC 0x00000058 !!
+ModelSim-Altera Info: # 
+ModelSim-Altera Info: #   ========================================================
+ModelSim-Altera Info: #   PHASEÿÿÿâÿ” Data-Processing Registers
+ModelSim-Altera Info: #   ========================================================
+ModelSim-Altera Info: # 
+ModelSim-Altera Info: #   [FAIL] Test 01  R1   got=0x00000000  exp=0x00000013  MOV R1,#0x13                  R1=19
+ModelSim-Altera Info: #   [FAIL] Test 02  R2   got=0x00000000  exp=0x00000026  ADD R2,R1,R1                  R2=38
+ModelSim-Altera Info: #   [FAIL] Test 03  R3   got=0x00000000  exp=0x00000002  AND R3,R1,R2  (0x13&0x26)     R3=2
+ModelSim-Altera Info: #   [FAIL] Test 04  R4   got=0x00000000  exp=0x0000004c  MOV R4,R1 LSL#2  (19<<2)      R4=76
+ModelSim-Altera Info: #   [FAIL] Test 05  R5   got=0x00000000  exp=0x0000000a  SUB R5,R1,R2 LSR#2 (19-9)     R5=10
+ModelSim-Altera Info: #   [FAIL] Test 06  R6   got=0x00000000  exp=0x80000002  ORR R6,R3,R3 ROR#2            R6=0x80000002
+ModelSim-Altera Info: #   [FAIL] Test 07  R7   got=0x00000000  exp=0xfffffff8  MOV R7,R6 ASR#28              R7=0xFFFFFFF8
+ModelSim-Altera Info: # 
+ModelSim-Altera Info: #   ========================================================
+ModelSim-Altera Info: #   PHASE 3ÿÿÿ” Memory Instructions (STR + LDR)
+ModelSim-Altera Info: #   ========================================================
+ModelSim-Altera Info: # 
+ModelSim-Altera Info: #   STR R2,[R1,#85]  addr=19+85=104
+ModelSim-Altera Info: #   LDR R8,[R3,#102] addr=2+102=104 (same word)
+ModelSim-Altera Info: #   R8 must equal R2 = 38 = 0x26
+ModelSim-Altera Info: # 
+ModelSim-Altera Info: #   [FAIL] Test 08  R8   got=0x00000000  exp=0x00000026  LDR loaded STR value          R8=38=0x26
+ModelSim-Altera Info: # 
+ModelSim-Altera Info: #   ========================================================
+ModelSim-Altera Info: #   PHASE 4ÿÿÿ” Branch Instructions
+ModelSim-Altera Info: #   ========================================================
+ModelSim-Altera Info: # 
+ModelSim-Altera Info: #   B #0 at 0x0C: R4=76 proves 0x14 executed.
+ModelSim-Altera Info: #   [FAIL] Test 09  R4   got=0x00000000  exp=0x0000004c  B taken -> 0x14 ran           R4=76=0x4C
+ModelSim-Altera Info: #   CMP R2,R8 at 0x2C: R2-R8=38-38=0, Z should be 1.
+ModelSim-Altera Info: #   [FAIL] Test 10  R2   got=0x00000000  exp=0x00000026  CMP left  operand             R2=38
+ModelSim-Altera Info: #   [FAIL] Test 11  R8   got=0x00000000  exp=0x00000026  CMP right operand             R8=38
+ModelSim-Altera Info: #   BL at 0x3C: R14 should be 0x3C+4=0x40.
+ModelSim-Altera Info: #   [FAIL] Test 12  R14  got=0x00000000  exp=0x00000040  BL saved return address       R14=0x40
+ModelSim-Altera Info: #   BX at 0x48: loop through 0x44 sets R0=0x330.
+ModelSim-Altera Info: #   [FAIL] Test 13  R0   got=0x00000000  exp=0x00000330  BX loop -> MOV R0,#0x330 ran  R0=0x330
+ModelSim-Altera Info: #   PC must be cycling {0x40, 0x44, 0x48}.
+ModelSim-Altera Info: #   [FAIL] Test 14  PC=0x0000008c NOT in {0x00000040,0x00000044,0x00000048}  PC inside BX loop
+ModelSim-Altera Info: # 
+ModelSim-Altera Info: #   ========================================================
+ModelSim-Altera Info: #   PHASEÿÿÿâÿ” Conditional Logic Summary
+ModelSim-Altera Info: #   ========================================================
+ModelSim-Altera Info: # 
+ModelSim-Altera Info: #   AL: R1..R8 correct -> all AL instructions ran.
+ModelSim-Altera Info: #   EQ: R14=0x40 -> BEQ was taken -> EQ condition works.
+ModelSim-Altera Info: #   NE: R14=0x40 -> BNE was NOT taken -> NE condition works.
+ModelSim-Altera Info: # 
+ModelSim-Altera Info: #   [FAIL] Test 15  CMP did NOT set Z=1 correctly: R14 != 0x40
+ModelSim-Altera Info: #   [FAIL] Test 16  BNE wrongly taken: R14 != 0x40
+ModelSim-Altera Info: # 
+ModelSim-Altera Info: #   ########################################################
+ModelSim-Altera Info: #   #                   FINAL SUMMARY                      #
+ModelSim-Altera Info: #   ########################################################
+ModelSim-Altera Info: #   #  Total tests  :  16                                  #
+ModelSim-Altera Info: #   #  PASSED       :   0                                  #
+ModelSim-Altera Info: #   #  FAILED       :  16                                  #
+ModelSim-Altera Info: #   #  Consistency  : pass+fail= 16 (must equal total)     #
+ModelSim-Altera Info: #   #------------------------------------------------------#
+ModelSim-Altera Info: #   #  RESULT: ***  16 TEST(S) FAILED -- SEE ABOVE ***     #
+ModelSim-Altera Info: #   #------------------------------------------------------#
+ModelSim-Altera Info: #   #  If ALL registers = 0:                               #
+ModelSim-Altera Info: #   #    +notimingchecks missing from vsim command         #
+ModelSim-Altera Info: #   #    Use run_tb_arm_gate.do instead of auto .do file   #
+ModelSim-Altera Info: #   #  If values have extra bits (e.g. 0x42 not 0x02):    #
+ModelSim-Altera Info: #   #    Same cause: +notimingchecks missing               #
+ModelSim-Altera Info: #   #  If PC shows UNEXPECTED addresses:                   #
+ModelSim-Altera Info: #   #    branches fail -> pcsrc wiring in arm.v            #
+ModelSim-Altera Info: #   ########################################################
+ModelSim-Altera Info: # 
+ModelSim-Altera Info: # ** Note: $finish    : C:/Users/Emre/Desktop/446/446_lab/lab2/tb_arm.v(426)
+ModelSim-Altera Info: #    Time: 7590 ns  Iteration: 0  Instance: /tb_arm
+ModelSim-Altera Info: # 1
+ModelSim-Altera Info: # Break in Module tb_arm at C:/Users/Emre/Desktop/446/446_lab/lab2/tb_arm.v line 426
+Info: NativeLink simulation flow was successful
