@@ -1,18 +1,29 @@
 module dmem (
     input  wire        clk,
-    input  wire        we,          // write enable (from MemWrite)
+    input  wire        we,
     input  wire [31:0] addr,
-    input  wire [31:0] wd,          // write data
-    output wire [31:0] rd           // read data
+    input  wire [31:0] wd,
+    output reg  [31:0] rd
 );
+
+    // 256 x 32-bit data RAM
     reg [31:0] mem [0:255];
 
+    wire [7:0] word_addr;
+    assign word_addr = addr[9:2];   // word-aligned address
+
     integer k;
-    initial
-        for (k = 0; k < 256; k = k + 1) mem[k] = 32'b0;
+    initial begin
+        for (k = 0; k < 256; k = k + 1)
+            mem[k] = 32'h00000000;
+    end
 
-    always @(posedge clk)
-        if (we) mem[addr[31:2]] <= wd;
+    always @(posedge clk) begin
+        if (we) begin
+            mem[word_addr] <= wd;
+        end
 
-    assign rd = mem[addr[31:2]];
+        rd <= mem[word_addr];
+    end
+
 endmodule
