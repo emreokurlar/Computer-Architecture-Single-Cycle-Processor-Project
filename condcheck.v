@@ -10,7 +10,7 @@ module condcheck (
         case (cond)
             4'b0000: condex = Z;               // EQ
             4'b0001: condex = ~Z;              // NE
-            /*4'b0010: condex = C;               // CS
+            4'b0010: condex = C;               // CS
             4'b0011: condex = ~C;              // CC
             4'b0100: condex = N;               // MI
             4'b0101: condex = ~N;              // PL
@@ -22,7 +22,6 @@ module condcheck (
             4'b1011: condex = (N != V);        // LT
             4'b1100: condex = ~Z & (N == V);   // GT
             4'b1101: condex = Z  | (N != V);   // LE
-				*/
             4'b1110: condex = 1'b1;            // AL (always)
             default: condex = 1'b0;
         endcase
